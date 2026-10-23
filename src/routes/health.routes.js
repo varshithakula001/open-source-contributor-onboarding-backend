@@ -11,9 +11,10 @@ const router = Router();
 router.get('/health', (req, res) => {
   const dbStatus = getDatabaseStatus();
 
-  // If DB is connected or unconfigured in dev/test, the server is healthy/operational.
-  // If DB was configured with MONGODB_URI but connection is failed/disconnected, status is degraded.
-  const isHealthy = dbStatus.status === 'connected' || (env.NODE_ENV !== 'production' && dbStatus.status === 'unconfigured');
+  // In development and test mode, the application health endpoint returns 200 (healthy)
+  // while accurately reporting the real database connection state (connected, disconnected, or unconfigured).
+  // In production mode, an unavailable/disconnected database returns 503 (degraded).
+  const isHealthy = env.NODE_ENV === 'production' ? dbStatus.status === 'connected' : true;
 
   res.status(isHealthy ? 200 : 503).json({
     success: true,

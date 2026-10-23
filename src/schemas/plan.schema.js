@@ -92,3 +92,18 @@ export const updateContributionPlanSchema = z
       .optional(),
   })
   .strict();
+
+/**
+ * Maintainer Review Inbox Query Schema
+ * Validates query parameters for GET /api/projects/:id/contribution-plans
+ */
+export const reviewInboxQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1, 'Page must be at least 1').optional().default(1),
+    limit: z.coerce.number().int().min(1).max(50, 'Limit cannot exceed 50 items per page').optional().default(10),
+    status: z
+      .enum(['draft', 'submitted', 'in_review', 'changes_requested', 'approved', 'rejected'])
+      .optional()
+      .default('submitted'),
+  })
+  .strict();

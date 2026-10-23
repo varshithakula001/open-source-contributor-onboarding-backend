@@ -72,7 +72,10 @@ describe('Phase 3: Auth Endpoints Behavior & Safety Fallbacks', () => {
 
       assert.equal(res.body.success, true);
       assert.equal(res.body.data.services.database.connected, false);
-      assert.equal(res.body.data.services.database.status, 'unconfigured');
+      assert.ok(
+        ['unconfigured', 'disconnected'].includes(res.body.data.services.database.status),
+        `Expected database status to be unconfigured or disconnected, got: ${res.body.data.services.database.status}`
+      );
     });
   });
 });

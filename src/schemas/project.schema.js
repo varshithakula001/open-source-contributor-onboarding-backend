@@ -113,3 +113,17 @@ export const verifyProjectSchema = z
       path: ['rejectionReason'],
     }
   );
+
+/**
+ * Public Project Discovery Query Schema
+ * Validates query parameters for GET /api/projects
+ */
+export const projectDiscoveryQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1, 'Page must be at least 1').optional().default(1),
+    limit: z.coerce.number().int().min(1).max(50, 'Limit cannot exceed 50 items per page').optional().default(10),
+    search: z.string().trim().max(100, 'Search query cannot exceed 100 characters').optional(),
+    topic: z.string().trim().toLowerCase().max(50, 'Topic filter cannot exceed 50 characters').optional(),
+    language: z.string().trim().toLowerCase().max(50, 'Language filter cannot exceed 50 characters').optional(),
+  })
+  .strict();

@@ -1,6 +1,7 @@
 import app from './src/app.js';
 import { env } from './src/config/env.js';
 import { connectDB, disconnectDB } from './src/config/db.js';
+import { initMongoStore } from './src/config/session.js';
 
 let server;
 
@@ -8,6 +9,9 @@ async function startServer() {
   try {
     // Attempt database connection (gracefully continues in dev if unconfigured)
     await connectDB();
+
+    // If database connected successfully, eagerly initialize persistent session store
+    initMongoStore();
 
     server = app.listen(env.PORT, () => {
       console.log(`🚀 Server listening on http://localhost:${env.PORT} [${env.NODE_ENV}]`);

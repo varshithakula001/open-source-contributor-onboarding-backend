@@ -91,6 +91,10 @@ erDiagram
         string contentDigest
         boolean isStale
         string staleReason
+        string indexingStatus "not_indexed | indexing | indexed | failed"
+        string indexingError
+        date indexedAt
+        number chunksCount
         date createdAt
         date updatedAt
     }
@@ -228,9 +232,15 @@ erDiagram
 ### 3.4 Snapshot (`src/models/Snapshot.js`)
 * **Purpose**: Versioned container for repository documentation and curated issues.
 * **Staleness Tracking**: When repository documentation changes or issues fall out of date, maintainers mark `isStale: true` and record `staleReason`.
+* **RAG Vector Search Lifecycle (Phase 5)**:
+  * `indexingStatus`: Tracks RAG vector indexing state (`not_indexed`, `indexing`, `indexed`, `failed`).
+  * `indexingError`: Stores error diagnostics if embedding or ingestion fails.
+  * `indexedAt`: Timestamp when vector indexing completed.
+  * `chunksCount`: Total number of chunk vectors generated and indexed in MongoDB Atlas.
 * **Indexes**:
   * `{ projectId: 1, version: 1 }` (unique compound index ensuring distinct versions).
   * `{ projectId: 1, isStale: 1, importStatus: 1 }`.
+  * `{ projectId: 1, indexingStatus: 1 }`.
 
 ### 3.5 Document (`src/models/Document.js`)
 * **Purpose**: Represents parsed files from a repository snapshot (e.g. `README.md`, `SETUP.md`).
@@ -243,9 +253,12 @@ erDiagram
 * **Purpose**: Documentation split into discrete text segments for semantic vector search and RAG Q&A.
 * **Vector Configuration**:
   * `embedding`: Validates 768 numeric dimensions (matching Ollama `nomic-embed-text`).
+  * `metadata`: Preserves `filePath`, `sectionTitle`, `startLine`, `endLine`, `docType`, and `charCount`.
+* **Atlas Vector Search**: Target collection for the `vector_index` search index using cosine similarity and pre-filters on `projectId` and `snapshotId`.
 * **Indexes**:
   * `{ documentId: 1, chunkIndex: 1 }` (unique compound index enforcing sequential chunk ordering).
-  * `{ projectId: 1 }`, `{ snapshotId: 1 }`.
+  * `{ snapshotId: 1, chunkIndex: 1 }` (fast sequential retrieval per snapshot).
+  * `{ projectId: 1, snapshotId: 1 }` (fast query pre-filtering).
 
 ### 3.7 Issue (`src/models/Issue.js`)
 * **Purpose**: Curated onboarding tasks and issues.

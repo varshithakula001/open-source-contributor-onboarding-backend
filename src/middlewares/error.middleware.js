@@ -19,6 +19,11 @@ export function notFoundHandler(req, res, next) {
  * Ensures safe, predictable error responses without leaking sensitive system information.
  */
 export function errorHandler(err, req, res, next) {
+  // If headers have already been sent to client, delegate to Express default handler
+  if (res.headersSent) {
+    return next(err);
+  }
+
   // Determine appropriate HTTP status code
   let statusCode = err.statusCode || err.status || 500;
   let errorCode = err.code || 'INTERNAL_SERVER_ERROR';
@@ -29,6 +34,20 @@ export function errorHandler(err, req, res, next) {
     statusCode = 400;
     errorCode = 'INVALID_JSON_BODY';
     message = 'Malformed JSON payload in request body.';
+  }
+
+  // Handle payload too large errors
+  if (err.type === 'entity.too.large' || statusCode === 413) {
+    statusCode = 413;
+    errorCode = 'PAYLOAD_TOO_LARGE';
+    message = 'Request entity too large. Payload exceeds the maximum allowed size limit.';
+  }
+
+  // Handle Mongo duplicate key error (E11000)
+  if (err.code === 11000) {
+    statusCode = 409;
+    errorCode = 'CONFLICT';
+    message = 'A resource with conflicting unique fields already exists.';
   }
 
   // Handle CSRF token validation failure from csrf-sync

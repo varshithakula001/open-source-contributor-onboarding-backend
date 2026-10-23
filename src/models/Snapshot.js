@@ -52,6 +52,28 @@ const snapshotSchema = new mongoose.Schema(
       trim: true,
       maxlength: [500, 'Stale reason cannot exceed 500 characters'],
     },
+    indexingStatus: {
+      type: String,
+      enum: {
+        values: ['not_indexed', 'indexing', 'indexed', 'failed'],
+        message: '{VALUE} is not a valid indexing status. Must be "not_indexed", "indexing", "indexed", or "failed".',
+      },
+      default: 'not_indexed',
+      required: true,
+    },
+    indexingError: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Indexing error message cannot exceed 1000 characters'],
+    },
+    indexedAt: {
+      type: Date,
+    },
+    chunksCount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Chunks count cannot be negative'],
+    },
   },
   {
     timestamps: true,
@@ -63,6 +85,9 @@ snapshotSchema.index({ projectId: 1, version: 1 }, { unique: true });
 
 // Support fast lookup of non-stale imported snapshots
 snapshotSchema.index({ projectId: 1, isStale: 1, importStatus: 1 });
+
+// Support fast lookup of indexed snapshots for RAG
+snapshotSchema.index({ projectId: 1, indexingStatus: 1 });
 
 export const Snapshot = mongoose.model('Snapshot', snapshotSchema);
 export default Snapshot;

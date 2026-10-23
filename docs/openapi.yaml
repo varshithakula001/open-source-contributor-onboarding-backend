@@ -1,0 +1,512 @@
+openapi: 3.0.3
+info:
+  title: Open Source Contributor Onboarding Backend API
+  version: 1.0.0
+  description: >
+    Backend REST API for the Open Source Contributor Onboarding portal.
+    Provides project discovery, issue curation, contributor interest tracking,
+    contribution plan submissions, maintainer review inbox, repository snapshot imports,
+    and moderator project verification.
+servers:
+  - url: http://localhost:5000/api
+    description: Local Development Server
+
+paths:
+  /health:
+    get:
+      summary: Server & Database Health Probe
+      tags:
+        - System
+      responses:
+        '200':
+          description: Server is operational.
+        '503':
+          description: Production degraded or critical services offline.
+
+  /auth/csrf:
+    get:
+      summary: Retrieve CSRF Token
+      tags:
+        - Authentication
+      responses:
+        '200':
+          description: Synchronizer CSRF token returned and session cookie set.
+
+  /projects:
+    get:
+      summary: Public Project Discovery
+      tags:
+        - Projects
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: topic
+          in: query
+          schema:
+            type: string
+        - name: language
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of approved public projects.
+        '503':
+          description: Database unavailable.
+
+  /projects/{id}/issues:
+    get:
+      summary: Public Issue Browser
+      tags:
+        - Projects
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: skill
+          in: query
+          schema:
+            type: string
+        - name: effort
+          in: query
+          schema:
+            type: string
+            enum: [hours, weekend, few_days, week_plus]
+      responses:
+        '200':
+          description: Eligible open issues for this approved public project.
+        '404':
+          description: Project not found or private.
+
+  /issues/{id}/interest:
+    post:
+      summary: Express Contributor Interest in Issue
+      tags:
+        - Issues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - declaredAvailableHours
+              properties:
+                declaredAvailableHours:
+                  type: number
+                  minimum: 1
+                  maximum: 168
+                message:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '201':
+          description: Interest registered.
+        '400':
+          description: Issue taken or closed.
+        '401':
+          description: Authentication required.
+        '403':
+          description: Forbidden (contributor role required or CSRF invalid).
+        '409':
+          description: Active interest already exists.
+
+  /issues/{id}:
+    patch:
+      summary: Maintainer Issue Curation
+      tags:
+        - Issues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [open, taken, closed]
+                isStaleSetup:
+                  type: boolean
+                staleSetupNotes:
+                  type: string
+      responses:
+        '200':
+          description: Issue updated.
+        '403':
+          description: Forbidden (maintainer grant required).
+
+  /contribution-plans:
+    post:
+      summary: Submit Contribution Plan
+      tags:
+        - Contribution Plans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - projectId
+                - issueId
+                - snapshotId
+                - planObjective
+                - proposedApproach
+                - orderedImplementationSteps
+              properties:
+                projectId:
+                  type: string
+                issueId:
+                  type: string
+                snapshotId:
+                  type: string
+                planObjective:
+                  type: string
+                proposedApproach:
+                  type: string
+                orderedImplementationSteps:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - stepNumber
+                      - description
+                    properties:
+                      stepNumber:
+                        type: integer
+                      description:
+                        type: string
+                      targetFiles:
+                        type: array
+                        items:
+                          type: string
+                supportingEvidence:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - snapshotVersion
+                      - filePath
+                    properties:
+                      snapshotVersion:
+                        type: string
+                      filePath:
+                        type: string
+                      quoteOrExplanation:
+                        type: string
+      responses:
+        '201':
+          description: Plan submitted in 'submitted' status.
+        '400':
+          description: Invalid plan relationship or validation failure.
+
+  /contribution-plans/{id}:
+    get:
+      summary: Get Contribution Plan (Author or Project Maintainer)
+      tags:
+        - Contribution Plans
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan details.
+        '403':
+          description: Access denied (unrelated user).
+        '404':
+          description: Plan not found.
+
+  /contribution-plans/{id}/review:
+    post:
+      summary: Review Contribution Plan
+      tags:
+        - Contribution Plans
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+                - feedback
+              properties:
+                decision:
+                  type: string
+                  enum: [approved, request_changes, rejected]
+                feedback:
+                  type: string
+                  minLength: 10
+                  maxLength: 5000
+      responses:
+        '201':
+          description: Review created and plan status transitioned.
+        '400':
+          description: Plan already approved/rejected.
+        '403':
+          description: Forbidden (maintainer grant required or self-review attempt).
+
+  /projects/{id}/contribution-plans:
+    get:
+      summary: Maintainer Review Inbox (Supplementary)
+      tags:
+        - Projects
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: status
+          in: query
+          schema:
+            type: string
+            default: submitted
+      responses:
+        '200':
+          description: Contribution plans awaiting review for this project.
+        '403':
+          description: Forbidden (maintainer grant required).
+
+  /projects/{id}/imports:
+    post:
+      summary: Maintainer Snapshot Repository Import
+      tags:
+        - Projects
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+                - importSource
+              properties:
+                version:
+                  type: string
+                importSource:
+                  type: string
+                contentDigest:
+                  type: string
+                documents:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required:
+                      - filePath
+                      - title
+                      - content
+                    properties:
+                      filePath:
+                        type: string
+                      title:
+                        type: string
+                      content:
+                        type: string
+                      docType:
+                        type: string
+                        enum: [guide, setup, architecture, readme, other]
+                issues:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    required:
+                      - issueNumber
+                      - title
+                      - description
+                    properties:
+                      issueNumber:
+                        type: integer
+                      title:
+                        type: string
+                      description:
+                        type: string
+      responses:
+        '201':
+          description: Snapshot and associated documents/issues created.
+        '400':
+          description: Duplicate paths or numbers.
+        '409':
+          description: Snapshot version already exists.
+
+  /projects/{id}/verification:
+    patch:
+      summary: Moderator Project Verification
+      tags:
+        - Projects
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - verificationStatus
+              properties:
+                verificationStatus:
+                  type: string
+                  enum: [approved, rejected]
+                rejectionReason:
+                  type: string
+      responses:
+        '200':
+          description: Project verified.
+        '403':
+          description: Forbidden (moderator role required or self-verification attempt).
+
+  /contributor-chat:
+    post:
+      summary: Contributor Documentation RAG Chat
+      tags:
+        - Chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - projectId
+              properties:
+                projectId:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                  description: 24-character hexadecimal MongoDB ObjectId
+                message:
+                  type: string
+                  minLength: 2
+                  maxLength: 2000
+                  description: Natural language query about project documentation
+                query:
+                  type: string
+                  minLength: 2
+                  maxLength: 2000
+                  description: Alternative query field name
+                snapshotId:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                  description: Target specific snapshot version (optional)
+      responses:
+        '200':
+          description: Context-grounded response with non-fabricated citations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      answer:
+                        type: string
+                      sources:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            filePath:
+                              type: string
+                            startLine:
+                              type: integer
+                            endLine:
+                              type: integer
+                            sectionTitle:
+                              type: string
+                            similarityScore:
+                              type: number
+                      snapshotVersion:
+                        type: string
+                      staleSnapshotWarning:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation error in request body.
+        '401':
+          description: Authentication session required.
+        '403':
+          description: Private project access forbidden.
+        '404':
+          description: Target project not found.
+        '429':
+          description: Rate limit exceeded.
+        '503':
+          description: Ollama inference service unavailable.

@@ -18,5 +18,8 @@ export const submitInterestSchema = z
       .max(1000, 'Message cannot exceed 1000 characters')
       .optional()
       .default(''),
-  })
-  .strict();
+
+    contributorId: z
+      .string()
+      .optional(), // Safely ignored: contributorId is always derived from authenticated session
+  });

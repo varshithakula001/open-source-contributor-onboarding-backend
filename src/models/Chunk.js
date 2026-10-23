@@ -82,5 +82,9 @@ const chunkSchema = new mongoose.Schema(
 // Enforce unique chunk sequence number per document
 chunkSchema.index({ documentId: 1, chunkIndex: 1 }, { unique: true });
 
+// Support fast query and cleanup of chunks by snapshot or project
+chunkSchema.index({ snapshotId: 1, chunkIndex: 1 });
+chunkSchema.index({ projectId: 1, snapshotId: 1 });
+
 export const Chunk = mongoose.model('Chunk', chunkSchema);
 export default Chunk;

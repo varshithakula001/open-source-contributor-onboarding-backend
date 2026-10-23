@@ -1,7 +1,17 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-// Load variables from .env file into process.env
+// Detect whether process is executing under automated test runner (e.g. node --test)
+const isTestExecution =
+  process.env.NODE_ENV === 'test' ||
+  process.execArgv.some((arg) => arg.includes('test')) ||
+  process.argv.some((arg) => arg.includes('test') || arg.endsWith('.test.js'));
+
+if (isTestExecution && process.env.NODE_ENV !== 'production') {
+  process.env.NODE_ENV = 'test';
+}
+
+// Load variables from .env file into process.env (dotenv preserves pre-set environment variables)
 dotenv.config();
 
 /**
@@ -55,6 +65,35 @@ const envSchema = z.object({
     .transform((val) => parseInt(val, 10))
     .refine((val) => !isNaN(val) && val >= 10 && val <= 14, {
       message: 'BCRYPT_SALT_ROUNDS must be an integer between 10 and 14',
+    }),
+
+  // Phase 5: Ollama and MongoDB Atlas Vector Search settings
+  OLLAMA_BASE_URL: z
+    .string()
+    .default('http://localhost:11434')
+    .transform((val) => val.trim().replace(/\/+$/, '')),
+
+  OLLAMA_LLM_MODEL: z
+    .string()
+    .default('llama3.2')
+    .transform((val) => val.trim()),
+
+  OLLAMA_EMBED_MODEL: z
+    .string()
+    .default('nomic-embed-text')
+    .transform((val) => val.trim()),
+
+  ATLAS_VECTOR_INDEX_NAME: z
+    .string()
+    .default('vector_index')
+    .transform((val) => val.trim()),
+
+  EMBEDDING_DIMENSIONS: z
+    .string()
+    .default('768')
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !isNaN(val) && val > 0, {
+      message: 'EMBEDDING_DIMENSIONS must be a positive integer',
     }),
 }).superRefine((data, ctx) => {
   // In production, MONGODB_URI and SESSION_SECRET are strictly required.

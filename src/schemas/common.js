@@ -9,6 +9,15 @@ export const objectIdSchema = z
   .regex(/^[0-9a-fA-F]{24}$/, 'Invalid MongoDB ObjectId string format (must be 24 hex characters)');
 
 /**
+ * Standard URL parameter schema validating a 24-character MongoDB ObjectId in req.params.id
+ */
+export const idParamSchema = z
+  .object({
+    id: objectIdSchema,
+  })
+  .strict();
+
+/**
  * Normalizes and formats Zod validation errors into a clean array of field error messages.
  */
 export function formatZodErrors(error) {

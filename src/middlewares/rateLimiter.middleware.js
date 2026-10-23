@@ -70,4 +70,13 @@ export const resetPasswordRateLimiter = createRateLimiter({
   message: 'Too many password reset attempts. Please try again after 15 minutes.',
 });
 
+/**
+ * Rate limiter for contributor documentation RAG questions: 30 requests per 15 minutes
+ */
+export const chatRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: 'Too many documentation questions submitted. Please wait a few minutes before asking again.',
+});
+
 export { createRateLimiter };
