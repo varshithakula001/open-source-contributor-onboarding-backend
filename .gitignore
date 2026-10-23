@@ -1,0 +1,33 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs and runtime data
+logs/
+*.log
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary directories
+tmp/
+temp/
