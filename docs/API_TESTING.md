@@ -549,3 +549,111 @@ For protected endpoints:
   * `404 Not Found` (`PROJECT_NOT_FOUND`): Target project does not exist.
   * `429 Too Many Requests` (`RATE_LIMIT_EXCEEDED`): Rate limit exceeded.
   * `503 Service Unavailable` (`AI_SERVICE_UNAVAILABLE`): Ollama inference engine offline or model missing.
+
+---
+
+### L. Purposeful AI-Powered Onboarding Agent (Phase 6)
+* **Endpoint**: `POST /api/onboarding-agent`
+* **Method**: `POST`
+* **Authentication**: Required (`requireAuth`)
+* **Role**: `contributor`, `maintainer`, or `moderator`
+* **Rate Limiting**: `agentRateLimiter` (20 requests / 15 minutes)
+* **CSRF**: Required (`X-CSRF-Token` header)
+* **Payload**:
+  ```json
+  {
+    "query": "Find a task I can start this weekend",
+    "availableHours": 12,
+    "effort": "weekend",
+    "skills": ["javascript", "react"],
+    "interests": ["testing", "documentation"]
+  }
+  ```
+* **Optional Payload Fields**:
+  * `projectId` (optional 24-character hex ObjectId): Scopes task discovery to a single project.
+  * `availableHours` (optional number between 1 and 168): Weekly available hours.
+  * `effort` (optional enum: `hours`, `weekend`, `few_days`, `week_plus`).
+  * `skills` (optional array of strings).
+  * `interests` (optional array of strings).
+* **Security Rules**:
+  * Requires valid authenticated session (`requireAuth`).
+  * If `projectId` is provided for a private project, user must hold an active `MaintainerGrant` or own the project; otherwise returns `403 FORBIDDEN`.
+  * Moderator role alone does not bypass private project boundaries without a maintainer grant.
+  * Bounded tool orchestration only; never automatically changes issue status to `taken` or creates an approved `ContributionPlan`.
+* **Example Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "agentRunId": "6718d45f9e2b1a001a112233",
+      "recommendationFound": true,
+      "recommendedIssue": {
+        "issueId": "6718d45f9e2b1a001a112244",
+        "projectId": "6718d45f9e2b1a001a112255",
+        "projectName": "Open Web Project",
+        "issueNumber": 101,
+        "title": "Add responsive navigation tests",
+        "description": "Write unit tests in React and Node.js for nav component.",
+        "status": "open",
+        "requiredSkills": ["react", "node.js"],
+        "prerequisites": ["Node 20+ installed"],
+        "setupSteps": ["npm install", "npm test"],
+        "estimatedEffort": "weekend",
+        "matchReasons": [
+          "Matches your skills: react, node.js.",
+          "Estimated effort (weekend) fits your target timeframe."
+        ],
+        "skillGaps": []
+      },
+      "prerequisiteCheck": {
+        "issueId": "6718d45f9e2b1a001a112244",
+        "requiredSkills": ["react", "node.js"],
+        "matchingSkills": ["react", "node.js"],
+        "skillGaps": [],
+        "prerequisites": ["Node 20+ installed"],
+        "setupSteps": ["npm install", "npm test"],
+        "snapshotFreshnessStatus": "fresh",
+        "staleWarning": null,
+        "documentationReferences": [
+          {
+            "filePath": "README.md",
+            "sectionTitle": "Testing Instructions",
+            "snapshotVersion": "v1.0.0"
+          }
+        ]
+      },
+      "availabilityCheck": {
+        "issueId": "6718d45f9e2b1a001a112244",
+        "isAvailable": true,
+        "status": "open",
+        "checkedAt": "2026-10-24T02:00:00.000Z",
+        "disclaimer": "Authoritative check confirms issue status as open. This check does NOT reserve or lock the issue."
+      },
+      "starterPlan": {
+        "summary": "Recommended task #101 (\"Add responsive navigation tests\") is ideal for your weekend schedule.",
+        "suggestedInitialSteps": [
+          "1. Verify local Node.js environment matches required version Node 20+ installed.",
+          "2. Clone the repository and execute setup commands: npm install; npm test.",
+          "3. Review project documentation at README.md (Testing Instructions).",
+          "4. Prepare and submit a formal ContributionPlan for maintainer review before opening a pull request."
+        ],
+        "estimatedTimeframe": "weekend",
+        "evidenceCitations": [
+          {
+            "filePath": "README.md",
+            "sectionTitle": "Testing Instructions",
+            "snapshotVersion": "v1.0.0"
+          }
+        ]
+      },
+      "disclaimer": "AI recommendations and starter plans are exploratory and do NOT reserve or assign the issue. Please submit a formal contribution plan for maintainer review."
+    }
+  }
+  ```
+* **Expected Error Responses**:
+  * `400 Bad Request` (`VALIDATION_ERROR`): Query length < 3 or > 500 characters, or invalid ObjectId.
+  * `401 Unauthorized` (`UNAUTHORIZED`): Contributor session absent.
+  * `403 Forbidden` (`FORBIDDEN`): Contributor lacks grant to access private project.
+  * `403 Forbidden` (`CSRF_INVALID`): Missing or invalid CSRF token.
+  * `429 Too Many Requests` (`RATE_LIMIT_EXCEEDED`): Exceeded 20 agent requests per 15 minutes.
+  * `503 Service Unavailable` (`DATABASE_UNAVAILABLE`): Database is disconnected.

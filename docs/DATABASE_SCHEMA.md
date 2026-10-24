@@ -264,9 +264,13 @@ erDiagram
 * **Purpose**: Curated onboarding tasks and issues.
 * **Prerequisites & Availability**: Explicitly tracks `requiredSkills`, `prerequisites`, `setupSteps`, and `status` (`open`, `taken`, `closed`).
 * **Anti-Hallucination**: The model does not label issues as "easy"; matching is based on documented skills and available hours.
+* **Semantic Vector Search (Phase 6)**:
+  * `embedding`: Optional 768-dimensional numeric vector matching Ollama `nomic-embed-text` embeddings generated from composite issue metadata (title, description, required skills, labels, prerequisites, effort).
+  * Validates exact dimension length (768) and finite numbers.
 * **Indexes**:
   * `{ projectId: 1, issueNumber: 1 }` (unique compound index per project).
   * `{ projectId: 1, status: 1 }` (fast filtering of available open issues).
+  * MongoDB Atlas Vector Index: `issue_vector_index` defined on collection `issues` with path `embedding` (768-dim, cosine similarity) and pre-filters `projectId`, `status`.
 
 ### 3.8 Interest (`src/models/Interest.js`)
 * **Purpose**: Records a contributor’s declared interest and available weekly hours for an issue.
@@ -290,29 +294,35 @@ erDiagram
   * `{ contributionPlanId: 1, reviewedAt: -1 }`.
 
 ### 3.11 AgentRun (`src/models/AgentRun.js`)
-* **Purpose**: Audit logging and execution tracing for the onboarding agent.
-* **Safety Rules**: Logs tool calls (`findIssues`, `inspectPrerequisites`, `checkIssueAvailability`), inputs, outputs, and reasoning steps without recording secrets.
+* **Purpose**: Audit logging, diagnostics, and execution tracing for the onboarding agent (`POST /api/onboarding-agent`).
+* **Execution Tracking**:
+  * `agentType`: Agent discriminator (defaults to `'onboarding'`).
+  * `status`: Execution state (`started`, `running`, `completed`, `failed`).
+  * `toolCalls`: Array of structured tool invocation logs recording `toolName` (`findIssues`, `inspectPrerequisites`, `checkIssueAvailability`), `inputPayload`, `outputPayload`, `status`, `durationMs`, and `executedAt`.
+  * `inputs`: Normalized contributor request payload (`query`, `availableHours`, `effort`, `projectId`).
+  * `outputs`: Grounded response payload containing `recommendationFound`, `recommendedIssue`, `starterPlan`, `disclaimer`, and non-hallucinated citations.
+  * `errorMessage`: Sanitized error diagnostic string (never exposes secrets or system paths).
+* **Safety Rules**: Logs tool calls, inputs, outputs, and reasoning steps without recording secrets or session tokens.
 * **Indexes**:
   * `{ userId: 1, createdAt: -1 }`.
   * `{ status: 1 }`.
 
 ---
 
-## 4. Session Storage Design (Phase 3 Integration)
+## 4. Session Storage Design
 
-In Phase 3, server-side sessions will be implemented using `express-session` combined with `connect-mongo`.
+Server-side sessions are implemented using `express-session` combined with `connect-mongo`.
 
 * `connect-mongo` manages its own internal MongoDB collection named `sessions`.
 * It handles session serialization, TTL (Time-To-Live) indexing, and automatic cleanup of expired sessions.
-* **Design Decision**: We intentionally do not create a redundant Mongoose `Session` model. Introducing an application-level Mongoose model for `sessions` would conflict with `connect-mongo`'s internal schema and driver operations. Authentication controllers in Phase 3 will rely directly on `req.session`.
+* **Design Decision**: We intentionally do not create a redundant Mongoose `Session` model. Introducing an application-level Mongoose model for `sessions` would conflict with `connect-mongo`'s internal schema and driver operations. Authentication controllers rely directly on `req.session`.
 
 ---
 
 ## 5. MongoDB Atlas Vector Search Index Configuration
 
-For Phase 5 (Repository RAG), a Vector Search index must be created on MongoDB Atlas on the `chunks` collection:
-
-### Index Definition (Atlas JSON):
+### 5.1 Repository Documentation Chunks Index (`vector_index`)
+Created on the `chunks` collection for Phase 5 documentation RAG:
 ```json
 {
   "fields": [
@@ -333,10 +343,39 @@ For Phase 5 (Repository RAG), a Vector Search index must be created on MongoDB A
   ]
 }
 ```
-
 * **Index Name**: `vector_index`
 * **Collection**: `chunks`
 * **Path**: `embedding`
 * **Dimensions**: `768` (matching `nomic-embed-text`)
 * **Similarity Metric**: `cosine`
 * **Filter Paths**: `projectId` and `snapshotId` (enables pre-filtering vectors strictly to permitted and current snapshots, preventing private-project data leakage).
+
+### 5.2 Curated Issues Index (`issue_vector_index`)
+Created on the `issues` collection for Phase 6 Onboarding Agent task matching:
+```json
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 768,
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "projectId"
+    },
+    {
+      "type": "filter",
+      "path": "status"
+    }
+  ]
+}
+```
+* **Index Name**: `issue_vector_index`
+* **Collection**: `issues`
+* **Path**: `embedding`
+* **Dimensions**: `768` (matching `nomic-embed-text`)
+* **Similarity Metric**: `cosine`
+* **Filter Paths**: `projectId` and `status` (enables pre-filtering vectors strictly to permitted projects and `open` issues, preventing closed/taken issues from appearing).
+* **CLI Indexer**: `npm run rag:index-issues` parses open issues, constructs composite descriptions, generates 768-dim embeddings via Ollama, and persists them to MongoDB.

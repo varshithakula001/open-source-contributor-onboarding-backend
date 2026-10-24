@@ -79,4 +79,13 @@ export const chatRateLimiter = createRateLimiter({
   message: 'Too many documentation questions submitted. Please wait a few minutes before asking again.',
 });
 
+/**
+ * Rate limiter for AI Onboarding Agent requests: 20 requests per 15 minutes
+ */
+export const agentRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many onboarding agent requests submitted. Please wait a few minutes before trying again.',
+});
+
 export { createRateLimiter };

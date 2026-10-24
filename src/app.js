@@ -9,6 +9,7 @@ import projectRoutes from './routes/project.routes.js';
 import issueRoutes from './routes/issue.routes.js';
 import planRoutes from './routes/plan.routes.js';
 import chatRoutes from './routes/chat.routes.js';
+import agentRoutes from './routes/agent.routes.js';
 import { notFoundHandler, errorHandler } from './middlewares/error.middleware.js';
 
 const app = express();
@@ -55,6 +56,9 @@ app.use('/api/contribution-plans', planRoutes);
 
 // Mount Phase 5 Contributor Documentation Q&A RAG route
 app.use('/api/contributor-chat', chatRoutes);
+
+// Mount Phase 6 Purposeful Onboarding Agent route
+app.use('/api/onboarding-agent', agentRoutes);
 
 // Isolated testing helper route: strictly enabled only in test environment
 if (env.NODE_ENV === 'test') {

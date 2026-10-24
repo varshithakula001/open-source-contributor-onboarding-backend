@@ -75,6 +75,17 @@ const issueSchema = new mongoose.Schema(
       default: 'open',
       required: true,
     },
+    embedding: {
+      type: [Number],
+      default: undefined,
+      validate: {
+        validator: function (v) {
+          if (!v || v.length === 0) return true;
+          return v.length === 768 && v.every((n) => typeof n === 'number' && Number.isFinite(n));
+        },
+        message: 'Issue embedding vector must contain exactly 768 numeric dimensions.',
+      },
+    },
     assignedContributorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

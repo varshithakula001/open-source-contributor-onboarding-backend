@@ -88,6 +88,11 @@ const envSchema = z.object({
     .default('vector_index')
     .transform((val) => val.trim()),
 
+  ATLAS_ISSUE_VECTOR_INDEX_NAME: z
+    .string()
+    .default('issue_vector_index')
+    .transform((val) => val.trim()),
+
   EMBEDDING_DIMENSIONS: z
     .string()
     .default('768')

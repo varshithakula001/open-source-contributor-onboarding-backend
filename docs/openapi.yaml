@@ -510,3 +510,142 @@ paths:
           description: Rate limit exceeded.
         '503':
           description: Ollama inference service unavailable.
+
+  /onboarding-agent:
+    post:
+      summary: Purposeful AI-Powered Onboarding Agent Task Discovery & Starter Planning
+      tags:
+        - Onboarding Agent
+      security:
+        - SessionCookie: []
+        - CsrfTokenHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  minLength: 3
+                  maxLength: 500
+                  example: "Find a task I can start this weekend"
+                  description: Natural language contributor intent or schedule preference.
+                projectId:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                  description: Target project MongoDB ObjectId (optional).
+                availableHours:
+                  type: number
+                  minimum: 1
+                  maximum: 168
+                  example: 12
+                  description: Contributor available hours (optional).
+                effort:
+                  type: string
+                  enum: [hours, weekend, few_days, week_plus]
+                  example: "weekend"
+                  description: Target effort timeframe (optional).
+                skills:
+                  type: array
+                  items:
+                    type: string
+                  example: ["javascript", "react"]
+                  description: Contributor skills (optional).
+                interests:
+                  type: array
+                  items:
+                    type: string
+                  example: ["testing", "documentation"]
+                  description: Contributor focus interests (optional).
+      responses:
+        '200':
+          description: Structured starter plan and verified available issue recommendation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      agentRunId:
+                        type: string
+                        example: "6718d45f9e2b1a001a112233"
+                      recommendationFound:
+                        type: boolean
+                        example: true
+                      recommendedIssue:
+                        type: object
+                        properties:
+                          issueId:
+                            type: string
+                          projectId:
+                            type: string
+                          projectName:
+                            type: string
+                          issueNumber:
+                            type: integer
+                          title:
+                            type: string
+                          description:
+                            type: string
+                          status:
+                            type: string
+                          requiredSkills:
+                            type: array
+                            items:
+                              type: string
+                          prerequisites:
+                            type: array
+                            items:
+                              type: string
+                          setupSteps:
+                            type: array
+                            items:
+                              type: string
+                          estimatedEffort:
+                            type: string
+                          matchReasons:
+                            type: array
+                            items:
+                              type: string
+                          skillGaps:
+                            type: array
+                            items:
+                              type: string
+                      prerequisiteCheck:
+                        type: object
+                      availabilityCheck:
+                        type: object
+                      starterPlan:
+                        type: object
+                        properties:
+                          summary:
+                            type: string
+                          suggestedInitialSteps:
+                            type: array
+                            items:
+                              type: string
+                          estimatedTimeframe:
+                            type: string
+                          evidenceCitations:
+                            type: array
+                      disclaimer:
+                        type: string
+        '400':
+          description: Validation error in request body.
+        '401':
+          description: Contributor authentication required.
+        '403':
+          description: Forbidden or missing CSRF token.
+        '429':
+          description: Agent rate limit exceeded (20 requests per 15 min).
+        '503':
+          description: Database or service unavailable.

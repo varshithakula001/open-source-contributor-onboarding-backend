@@ -1,13 +1,17 @@
+import mongoose from 'mongoose';
 import { Issue } from '../models/Issue.js';
 import { Project } from '../models/Project.js';
 import { Interest } from '../models/Interest.js';
 import { isUserProjectMaintainer } from './project.service.js';
+import { generateEmbedding, validateEmbedding } from './embedding.service.js';
+import { cosineSimilarity } from './vector-search.service.js';
+import { env } from '../config/env.js';
 import { ApiError } from '../utils/errors.js';
 
 /**
  * Contributor Issue Interest Submission Service
  * Allows a verified contributor to declare interest and availability on an open issue.
- * 
+ *
  * SECURITY:
  * - Contributor ID is derived securely from the authenticated session.
  * - Issue must belong to an approved, public project.
@@ -76,7 +80,7 @@ export async function submitIssueInterest(issueId, contributorUserId, { declared
 /**
  * Maintainer Issue Management Service
  * Allows authorized project maintainers to update issue status, setup steps, or metadata.
- * 
+ *
  * SECURITY:
  * - Requires project-scoped maintainer privileges or project ownership.
  * - Restricts modification strictly to approved mutable fields.
@@ -122,4 +126,148 @@ export async function updateIssue(issueId, maintainerUserId, updateData) {
 
   await issue.save();
   return issue;
+}
+
+/**
+ * Constructs a composite text string representing an issue for semantic embedding generation.
+ * Combines title, description, required skills, labels, prerequisites, and estimated effort.
+ *
+ * @param {Object} issue
+ * @returns {string}
+ */
+export function generateIssueEmbeddingText(issue) {
+  if (!issue) return '';
+  const parts = [
+    `Issue Title: ${issue.title || ''}`,
+    `Description: ${issue.description || ''}`,
+  ];
+  if (issue.requiredSkills && issue.requiredSkills.length > 0) {
+    parts.push(`Required Skills: ${issue.requiredSkills.join(', ')}`);
+  }
+  if (issue.labels && issue.labels.length > 0) {
+    parts.push(`Labels: ${issue.labels.join(', ')}`);
+  }
+  if (issue.prerequisites && issue.prerequisites.length > 0) {
+    parts.push(`Prerequisites: ${issue.prerequisites.join('. ')}`);
+  }
+  if (issue.estimatedEffort) {
+    parts.push(`Estimated Effort: ${issue.estimatedEffort}`);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Generates and saves a 768-dimensional embedding for an issue.
+ *
+ * @param {string} issueId
+ * @returns {Promise<Object>} Updated issue
+ */
+export async function indexIssueEmbedding(issueId) {
+  const issue = await Issue.findById(issueId);
+  if (!issue) {
+    throw new ApiError(404, 'ISSUE_NOT_FOUND', 'Target issue not found.');
+  }
+
+  const text = generateIssueEmbeddingText(issue);
+  const embedding = await generateEmbedding(text);
+  validateEmbedding(embedding, env.EMBEDDING_DIMENSIONS || 768);
+
+  issue.embedding = embedding;
+  await issue.save();
+  return issue;
+}
+
+/**
+ * Performs semantic vector search over the issues collection.
+ * Uses Atlas Vector Search ($vectorSearch stage on 'issues' collection),
+ * with pre-filtering by status and optional projectId.
+ * Falls back to exact in-memory cosine similarity if Atlas search is unavailable.
+ *
+ * @param {Object} params
+ * @param {string} [params.projectId]
+ * @param {Array<number>} params.queryVector
+ * @param {number} [params.limit=5]
+ * @param {string} [params.status='open']
+ * @returns {Promise<Array<Object>>} Ranked issues with score and matchingMethod
+ */
+export async function searchSimilarIssues({ projectId, queryVector, limit = 5, status = 'open' }) {
+  validateEmbedding(queryVector, env.EMBEDDING_DIMENSIONS || 768);
+
+  const filter = { status };
+  if (projectId) {
+    filter.projectId = new mongoose.Types.ObjectId(projectId);
+  }
+
+  const pipeline = [
+    {
+      $vectorSearch: {
+        index: env.ATLAS_ISSUE_VECTOR_INDEX_NAME || 'issue_vector_index',
+        path: 'embedding',
+        queryVector,
+        numCandidates: Math.max(limit * 10, 50),
+        limit,
+        filter,
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        projectId: 1,
+        snapshotId: 1,
+        issueNumber: 1,
+        title: 1,
+        description: 1,
+        requiredSkills: 1,
+        prerequisites: 1,
+        setupSteps: 1,
+        estimatedEffort: 1,
+        status: 1,
+        labels: 1,
+        sourceEvidence: 1,
+        score: { $meta: 'vectorSearchScore' },
+      },
+    },
+  ];
+
+  try {
+    const results = await Issue.aggregate(pipeline);
+    return results.map((r) => ({ ...r, matchingMethod: 'semantic_vector_search' }));
+  } catch (error) {
+    const isAtlasUnavailable =
+      error.code === 40324 ||
+      error.message?.includes('vectorSearch') ||
+      error.message?.includes('index') ||
+      error.message?.includes('Index not found');
+
+    if (isAtlasUnavailable) {
+      // In-memory cosine similarity fallback over matching issues with embeddings
+      const candidateIssues = await Issue.find({
+        ...filter,
+        embedding: { $exists: true, $ne: [] },
+      })
+        .select('_id projectId snapshotId issueNumber title description requiredSkills prerequisites setupSteps estimatedEffort status labels sourceEvidence embedding')
+        .lean();
+
+      if (candidateIssues.length === 0) {
+        return [];
+      }
+
+      const scored = candidateIssues
+        .map((iss) => {
+          const score = cosineSimilarity(queryVector, iss.embedding);
+          const { embedding, ...safeIssue } = iss;
+          return {
+            ...safeIssue,
+            score,
+            matchingMethod: 'semantic_vector_search_fallback',
+          };
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+
+      return scored;
+    }
+
+    throw error;
+  }
 }

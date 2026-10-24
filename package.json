@@ -8,7 +8,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test tests/**/*.test.js",
-    "rag:index": "node scripts/rag-index.js"
+    "db:seed": "node scripts/seed.js",
+    "rag:index": "node scripts/rag-index.js",
+    "rag:index-issues": "node scripts/rag-index-issues.js"
   },
   "keywords": [
     "open-source",
